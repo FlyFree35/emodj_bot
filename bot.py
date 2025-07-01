@@ -1,4 +1,5 @@
 import os
+import asyncio
 from telegram import (
     Update, ReplyKeyboardMarkup,
     InlineKeyboardMarkup, InlineKeyboardButton
@@ -9,10 +10,18 @@ from telegram.ext import (
 )
 from youtubesearchpython import VideosSearch
 from pytube import YouTube
+import uuid  # Для уникальных имен файлов
 
 # Токен и URL (укажи свои)
 TOKEN = os.getenv("BOT_TOKEN")
 WEBHOOK_URL = "https://emodj-bot-1.onrender.com"
+
+# Создаем папку для скачивания, если её нет
+if not os.path.exists("downloads"):
+    os.makedirs("downloads")
+
+# Блокировка, чтобы скачивания не конфликтовали
+download_lock = asyncio.Lock()
 
 # Главное меню
 keyboard = [
@@ -101,18 +110,29 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         await query.edit_message_text(f"⬇️ Начинаю скачивание: {title} ... Это может занять несколько секунд.")
 
-        try:
-            yt = YouTube(url)
-            audio_stream = yt.streams.filter(only_audio=True).order_by("abr").desc().first()
-            file_path = audio_stream.download(filename="song.mp3")
+        # Блокируем скачивание, чтобы избежать конфликтов
+        async with download_lock:
+            try:
+                yt = YouTube(url)
+                audio_stream = yt.streams.filter(only_audio=True).order_by("abr").desc().first()
 
-            with open(file_path, "rb") as audio_file:
-                await context.bot.send_audio(chat_id=update.effective_chat.id, audio=audio_file, title=title)
+                if not audio_stream:
+                    await context.bot.send_message(chat_id=update.effective_chat.id, text="❌ Не удалось найти аудио поток.")
+                    return
 
-            os.remove(file_path)
-            await context.bot.send_message(chat_id=update.effective_chat.id, text="✅ Готово! Приятного прослушивания 🎶")
-        except Exception as e:
-            await context.bot.send_message(chat_id=update.effective_chat.id, text=f"❌ Ошибка при скачивании: {e}")
+                # Уникальное имя файла
+                file_name = f"downloads/{uuid.uuid4()}.mp3"
+                audio_stream.download(output_path="downloads", filename=file_name.split('/')[-1])
+
+                # Отправляем файл
+                with open(file_name, "rb") as audio_file:
+                    await context.bot.send_audio(chat_id=update.effective_chat.id, audio=audio_file, title=title)
+
+                os.remove(file_name)
+                await context.bot.send_message(chat_id=update.effective_chat.id, text="✅ Готово! Приятного прослушивания 🎶")
+
+            except Exception as e:
+                await context.bot.send_message(chat_id=update.effective_chat.id, text=f"❌ Ошибка при скачивании: {e}")
 
 # Создаем и запускаем приложение
 app = ApplicationBuilder().token(TOKEN).build()
