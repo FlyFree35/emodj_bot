@@ -30,4 +30,22 @@ app.run_webhook(
     port=int(os.environ.get("PORT", 8443)),
     webhook_url="https://emodj-bot-1.onrender.com"
 )
+from youtubesearchpython import VideosSearch
+
+async def search_song(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not context.args:
+        await update.message.reply_text("❗ Напиши название трека после команды.")
+        return
+
+    query = " ".join(context.args)
+    search = VideosSearch(query, limit=1)
+    result = search.result()
+
+    if result['result']:
+        video = result['result'][0]
+        title = video['title']
+        url = video['link']
+        await update.message.reply_text(f"🎧 {title}\n🔗 {url}")
+    else:
+        await update.message.reply_text("Ничего не найдено.")
 
