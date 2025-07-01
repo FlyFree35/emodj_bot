@@ -52,7 +52,7 @@ async def mood(update: Update, context: ContextTypes.DEFAULT_TYPE):
     else:
         await update.message.reply_text("Напиши настроение после команды. Пример: /mood весело")
 
-app = ApplicationBuilder().token(os.getenv("BOT_TOKEN")).build()
+app = ApplicationBuilder().token(os.getenv("8190690928:AAG2o10BVhz1d_mLV3zXsqv5hdiKP6aXUxw")).build()
 app.add_handler(CommandHandler("start", start))
 app.add_handler(CommandHandler("mood", mood))
 app.add_handler(CommandHandler("moods", moods))
