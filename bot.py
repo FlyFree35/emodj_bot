@@ -48,4 +48,6 @@ async def search_song(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(f"🎧 {title}\n🔗 {url}")
     else:
         await update.message.reply_text("Ничего не найдено.")
+from telegram.ext import MessageHandler, filters, CommandHandler
+app.add_handler(CommandHandler("track", search_song))
 
