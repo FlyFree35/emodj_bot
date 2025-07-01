@@ -2,6 +2,7 @@ from telegram import Update
 from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
 import os
 
+# Музыкальные плейлисты по настроению
 playlists = {
     "грустно": {
         "youtube": ["https://youtu.be/z3wAjJXbYzA"],
@@ -29,6 +30,7 @@ playlists = {
     }
 }
 
+# /start
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         "Привет! Напиши /mood <настроение>, и я пришлю музыку! 🎶\n"
@@ -36,26 +38,31 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "Доступные настроения: /moods"
     )
 
+# /moods
 async def moods(update: Update, context: ContextTypes.DEFAULT_TYPE):
     mood_list = "\n".join(playlists.keys())
     await update.message.reply_text(f"🎭 Доступные настроения:\n{mood_list}")
 
+# /mood <настроение>
 async def mood(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if context.args:
         mood = context.args[0].lower()
         if mood in playlists:
             yt_links = '\n'.join(playlists[mood]["youtube"])
             sp_links = '\n'.join(playlists[mood]["spotify"])
-            await update.message.reply_text(f"🎧 *{mood}*:\n\nYouTube:\n{yt_links}\n\nSpotify:\n{sp_links}", parse_mode='Markdown')
+            await update.message.reply_text(
+                f"🎧 *{mood}*\n\nYouTube:\n{yt_links}\n\nSpotify:\n{sp_links}",
+                parse_mode='Markdown'
+            )
         else:
             await update.message.reply_text("Такого настроения нет. Напиши /moods чтобы посмотреть список.")
     else:
         await update.message.reply_text("Напиши настроение после команды. Пример: /mood весело")
 
-ApplicationBuilder().token(os.getenv("BOT_TOKEN")).build()
-
+# создаём и запускаем бота
+app = ApplicationBuilder().token(os.getenv("BOT_TOKEN")).build()
 app.add_handler(CommandHandler("start", start))
 app.add_handler(CommandHandler("mood", mood))
 app.add_handler(CommandHandler("moods", moods))
-
 app.run_polling()
+
