@@ -9,8 +9,8 @@ from telegram.ext import (
     CallbackQueryHandler, ContextTypes, filters
 )
 from youtubesearchpython import VideosSearch
-from pytube import YouTube
-import uuid  # Для уникальных имен файлов
+import yt_dlp  # Используем вместо pytube
+import uuid
 
 # Токен и URL (укажи свои)
 TOKEN = os.getenv("BOT_TOKEN")
@@ -33,7 +33,7 @@ markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
 # Команда /start
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
-        "🎶 Добро пожаловать в EmoDJ — бот, который находит музыку по твоему настроению, артисту или названию!\n\n"
+        "🎶 Добро пожаловать в EmoDJ!\n"
         "Выбери действие ниже 👇",
         reply_markup=markup
     )
@@ -50,7 +50,7 @@ async def handle_buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("🎶 Введи название песни:")
     elif text == "🎭 найти по настроению".lower():
         context.user_data["mode"] = "mood"
-        await update.message.reply_text("🧠 Введи настроение (например: грустно, весело, мотивация):")
+        await update.message.reply_text("🧠 Введи настроение (\u043dапр.: весело, грустно):")
     elif text == "⚙️ настройки".lower():
         await update.message.reply_text("⚙️ Пока нет доступных настроек.")
     else:
@@ -68,7 +68,7 @@ async def process_query(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif mode == "mood":
         search_query = f"{query} music playlist"
     else:
-        await update.message.reply_text("❗ Пожалуйста, выбери действие в меню.")
+        await update.message.reply_text("\u2757 \u0412\u044b\u0431\u0435\u0440\u0438 \u0441\u043d\u0430\u0447\u0430\u043b\u0430 \u0434\u0435\u0439\u0441\u0442\u0432\u0438\u0435 \u0432 \u043c\u0435\u043d\u044e.")
         return
 
     search = VideosSearch(search_query, limit=1)
@@ -79,22 +79,21 @@ async def process_query(update: Update, context: ContextTypes.DEFAULT_TYPE):
         title = video['title']
         url = video['link']
 
-        # Сохраняем данные трека, чтобы потом скачать
-        context.user_data["last_track"] = {"title": title, "url": url}
+        context.user_data['last_track'] = {'title': title, 'url': url}
 
-        # Кнопки: ссылка и скачать MP3
         buttons = [
-            [InlineKeyboardButton("🔗 Слушать на YouTube", url=url)],
-            [InlineKeyboardButton("⬇️ Скачать MP3", callback_data="download_mp3")]
+            [InlineKeyboardButton("\ud83d\udd17 Слушать на YouTube", url=url)],
+            [InlineKeyboardButton("\u2b07\ufe0f Скачать MP3", callback_data="download_mp3")]
         ]
+
         await update.message.reply_text(
-            f"🎧 Найдена песня: {title}\nЧто хочешь сделать?",
+            f"\ud83c\udfb5 \u041d\u0430\u0439\u0434\u0435\u043d\u0430 \u043f\u0435\u0441\u043d\u044f: {title}\n\u0427\u0442\u043e \u0445\u043e\u0447\u0435\u0448\u044c \u0441\u0434\u0435\u043b\u0430\u0442\u044c?",
             reply_markup=InlineKeyboardMarkup(buttons)
         )
     else:
-        await update.message.reply_text("❌ Ничего не найдено. Попробуй другой запрос.")
+        await update.message.reply_text("\u274c \u041d\u0438\u0447\u0435\u0433\u043e \u043d\u0435 \u043d\u0430\u0439\u0434\u0435\u043d\u043e. \u041f\u043e\u043f\u0440\u043e\u0431\u0443\u0439 \u0434\u0440\u0443\u0433\u043e\u0439 \u0437\u0430\u043f\u0440\u043e\u0441.")
 
-# Обработка кнопок inline (скачивание MP3)
+# Inline кнопка: Скачивание mp3
 async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
@@ -102,39 +101,40 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if query.data == "download_mp3":
         track = context.user_data.get("last_track")
         if not track:
-            await query.edit_message_text("⚠️ Ошибка: Трек не найден.")
+            await query.edit_message_text("⚠️ Ошибка: трек не найден.")
             return
 
         url = track["url"]
         title = track["title"]
 
-        await query.edit_message_text(f"⬇️ Начинаю скачивание: {title} ... Это может занять несколько секунд.")
+        await query.edit_message_text(f"⬇️ Скачиваю: {title} ...")
 
-        # Блокируем скачивание, чтобы избежать конфликтов
         async with download_lock:
             try:
-                yt = YouTube(url)
-                audio_stream = yt.streams.filter(only_audio=True).order_by("abr").desc().first()
+                ydl_opts = {
+                    'format': 'bestaudio/best',
+                    'outtmpl': 'downloads/%(id)s.%(ext)s',
+                    'quiet': True,
+                    'postprocessors': [{
+                        'key': 'FFmpegExtractAudio',
+                        'preferredcodec': 'mp3',
+                        'preferredquality': '192',
+                    }]
+                }
 
-                if not audio_stream:
-                    await context.bot.send_message(chat_id=update.effective_chat.id, text="❌ Не удалось найти аудио поток.")
-                    return
+                with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                    info = ydl.extract_info(url, download=True)
+                    filename = f"downloads/{info['id']}.mp3"
 
-                # Уникальное имя файла
-                file_name = f"downloads/{uuid.uuid4()}.mp3"
-                audio_stream.download(output_path="downloads", filename=file_name.split('/')[-1])
+                with open(filename, "rb") as audio:
+                    await context.bot.send_audio(chat_id=update.effective_chat.id, audio=audio, title=title)
 
-                # Отправляем файл
-                with open(file_name, "rb") as audio_file:
-                    await context.bot.send_audio(chat_id=update.effective_chat.id, audio=audio_file, title=title)
-
-                os.remove(file_name)
-                await context.bot.send_message(chat_id=update.effective_chat.id, text="✅ Готово! Приятного прослушивания 🎶")
-
+                os.remove(filename)
+                await context.bot.send_message(chat_id=update.effective_chat.id, text="✅ Готово!")
             except Exception as e:
-                await context.bot.send_message(chat_id=update.effective_chat.id, text=f"❌ Ошибка при скачивании: {e}")
+                await context.bot.send_message(chat_id=update.effective_chat.id, text=f"❌ Ошибка: {e}")
 
-# Создаем и запускаем приложение
+# Запуск приложения
 app = ApplicationBuilder().token(TOKEN).build()
 app.add_handler(CommandHandler("start", start))
 app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_buttons))
