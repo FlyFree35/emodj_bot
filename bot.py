@@ -1,30 +1,31 @@
 import os
-from aiohttp import web
 from telegram import Update
-from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
+from telegram.ext import (
+    ApplicationBuilder,
+    CommandHandler,
+    ContextTypes,
+)
 
+# Порт, который Render указывает через переменные окружения
+PORT = int(os.environ.get("PORT", 8443))
+
+# Токен и Webhook URL тоже через переменные окружения
 BOT_TOKEN = os.environ.get("BOT_TOKEN")
-WEBHOOK_PATH = "/webhook"
-PORT = int(os.environ.get("PORT", 8080))
+WEBHOOK_URL = os.environ.get("WEBHOOK_URL")
 
+# Команда /start
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("Привет! Я бот! 😊")
+    await update.message.reply_text("Привет! Я твой Emo-DJ бот!")
 
+# Создаем бота
 app = ApplicationBuilder().token(BOT_TOKEN).build()
+
+# Добавляем хендлер на команду /start
 app.add_handler(CommandHandler("start", start))
 
-async def handle_request(request):
-    data = await request.json()
-    update = Update.de_json(data, app.bot)
-    await app.update_queue.put(update)
-    return web.Response()
-
-web_app = web.Application()
-web_app.router.add_post(WEBHOOK_PATH, handle_request)
-
-async def on_startup(app_):
-    webhook_url = os.environ.get("WEBHOOK_URL")
-    await app.bot.set_webhook(url=webhook_url + WEBHOOK_PATH)
-
-web_app.on_startup.append(on_startup)
-app.run_web_app(web_app, port=PORT)
+# Запускаем через Webhook (именно так нужно на Render)
+app.run_webhook(
+    listen="0.0.0.0",
+    port=PORT,
+    webhook_url=WEBHOOK_URL
+)
