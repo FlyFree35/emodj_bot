@@ -1,19 +1,23 @@
 import os
 from telegram import Update, ReplyKeyboardMarkup
-from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, ContextTypes, filters
+from telegram.ext import (
+    ApplicationBuilder, CommandHandler, MessageHandler,
+    ContextTypes, filters
+)
 from youtubesearchpython import VideosSearch
 
-# Токен бота
+# Токен и URL
 TOKEN = os.getenv("BOT_TOKEN")
+WEBHOOK_URL = "https://emodj-bot-1.onrender.com"
 
-# Кнопки меню
+# Меню
 keyboard = [
     ["🔍 Поиск по артисту", "🎵 Поиск по названию"],
     ["🎭 Найти по настроению", "⚙️ Настройки"]
 ]
 markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
 
-# Команда /start
+# /start
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         "🎶 Добро пожаловать в EmoDJ — бот, который находит музыку по твоему настроению, артисту или названию!\n\n"
@@ -21,25 +25,40 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         reply_markup=markup
     )
 
-# Обработка текста кнопок и сообщений
+# Обработка сообщений
 async def handle_buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = update.message.text.strip().lower()
 
     if text == "🔍 поиск по артисту".lower():
-        await update.message.reply_text("Напиши имя исполнителя 🎤")
+        context.user_data["mode"] = "artist"
+        await update.message.reply_text("🎤 Введи имя артиста:")
     elif text == "🎵 поиск по названию".lower():
-        await update.message.reply_text("Напиши название песни 🎶")
+        context.user_data["mode"] = "title"
+        await update.message.reply_text("🎶 Введи название песни:")
     elif text == "🎭 найти по настроению".lower():
-        await update.message.reply_text("Напиши настроение: грустно, весело, мотивация, расслабиться и т.д.")
+        context.user_data["mode"] = "mood"
+        await update.message.reply_text("🧠 Введи настроение (например: грустно, весело, мотивация):")
     elif text == "⚙️ настройки".lower():
-        await update.message.reply_text("Пока нет доступных настроек ⚙️")
+        await update.message.reply_text("⚙️ Пока нет доступных настроек.")
     else:
-        await search_song(update, context)
+        await process_query(update, context)
 
-# Поиск трека по тексту
-async def search_song(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.message.text
-    search = VideosSearch(query, limit=1)
+# Обработка поискового запроса
+async def process_query(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    mode = context.user_data.get("mode")
+    query = update.message.text.strip()
+
+    if mode == "artist":
+        search_query = f"{query} official music"
+    elif mode == "title":
+        search_query = f"{query} official audio"
+    elif mode == "mood":
+        search_query = f"{query} music playlist"
+    else:
+        await update.message.reply_text("❗ Пожалуйста, выбери действие в меню.")
+        return
+
+    search = VideosSearch(search_query, limit=1)
     result = search.result()
 
     if result['result']:
@@ -50,10 +69,8 @@ async def search_song(update: Update, context: ContextTypes.DEFAULT_TYPE):
     else:
         await update.message.reply_text("❌ Ничего не найдено. Попробуй другой запрос.")
 
-# Сборка приложения
+# Сборка бота
 app = ApplicationBuilder().token(TOKEN).build()
-
-# Обработчики
 app.add_handler(CommandHandler("start", start))
 app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_buttons))
 
@@ -61,5 +78,5 @@ app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_buttons))
 app.run_webhook(
     listen="0.0.0.0",
     port=int(os.environ.get("PORT", 8443)),
-    webhook_url="https://emodj-bot-1.onrender.com"
+    webhook_url=WEBHOOK_URL
 )
