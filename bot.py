@@ -16,16 +16,9 @@ from telegram.ext import (
     CallbackQueryHandler, ContextTypes, filters
 )
 from youtubesearchpython import VideosSearch
-import yt_dlp
-import uuid
 
 TOKEN = os.getenv("BOT_TOKEN")
 WEBHOOK_URL = "https://emodj-bot-1.onrender.com"
-
-if not os.path.exists("downloads"):
-    os.makedirs("downloads")
-
-download_lock = asyncio.Lock()
 
 keyboard = [
     ["🔍 Поиск по артисту", "🎵 Поиск по названию"],
@@ -67,7 +60,7 @@ async def process_query(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif mode == "mood":
         search_query = f"{query} music playlist"
     else:
-        await update.message.reply_text("❗ Выбери сначала действие в меню.")
+        await update.message.reply_text("❗ Сначала выбери действие в меню.")
         return
 
     search = VideosSearch(search_query, limit=1)
@@ -92,6 +85,7 @@ async def process_query(update: Update, context: ContextTypes.DEFAULT_TYPE):
     else:
         await update.message.reply_text("❌ Ничего не найдено. Попробуй другой запрос.")
 
+# ВРЕМЕННАЯ ЗАГЛУШКА для кнопки "Скачать MP3"
 async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
@@ -102,36 +96,16 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await query.edit_message_text("⚠️ Ошибка: трек не найден.")
             return
 
-        url = track["url"]
         title = track["title"]
 
-        await query.edit_message_text(f"⬇️ Скачиваю: {title} ...")
+        await query.edit_message_text(
+            f"🎵 Трек: *{title}*\n\n"
+            "🔧 Функция скачивания MP3 скоро будет доступна!\n"
+            "Следи за обновлениями EmoDJ 🎧",
+            parse_mode="Markdown"
+        )
 
-        async with download_lock:
-            try:
-                ydl_opts = {
-                    'format': 'bestaudio/best',
-                    'outtmpl': 'downloads/%(id)s.%(ext)s',
-                    'quiet': True,
-                    'postprocessors': [{
-                        'key': 'FFmpegExtractAudio',
-                        'preferredcodec': 'mp3',
-                        'preferredquality': '192',
-                    }]
-                }
-
-                with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                    info = ydl.extract_info(url, download=True)
-                    filename = f"downloads/{info['id']}.mp3"
-
-                with open(filename, "rb") as audio:
-                    await context.bot.send_audio(chat_id=update.effective_chat.id, audio=audio, title=title)
-
-                os.remove(filename)
-                await context.bot.send_message(chat_id=update.effective_chat.id, text="✅ Готово!")
-            except Exception as e:
-                await context.bot.send_message(chat_id=update.effective_chat.id, text=f"❌ Ошибка: {e}")
-
+# Запуск приложения
 app = ApplicationBuilder().token(TOKEN).build()
 app.add_handler(CommandHandler("start", start))
 app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_buttons))
