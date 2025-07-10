@@ -3,19 +3,19 @@ import os
 import sys
 import io
 
-# Защита от UnicodeEncodeError при работе с эмодзи
 sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
 
 import asyncio
 from telegram import (
     Update, ReplyKeyboardMarkup,
-    InlineKeyboardMarkup, InlineKeyboardButton
+    InlineKeyboardMarkup, InlineKeyboardButton, InputFile
 )
 from telegram.ext import (
     ApplicationBuilder, CommandHandler, MessageHandler,
     CallbackQueryHandler, ContextTypes, filters
 )
 from youtubesearchpython import VideosSearch
+from yt_dlp import YoutubeDL
 
 TOKEN = os.getenv("BOT_TOKEN")
 WEBHOOK_URL = "https://emodj-bot-1.onrender.com"
@@ -26,11 +26,33 @@ keyboard = [
 ]
 markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
 
+
+def download_mp3_from_youtube(url, cookies_path="youtube_cookies.txt"):
+    ydl_opts = {
+        'format': 'bestaudio/best',
+        'outtmpl': 'downloads/%(title)s.%(ext)s',
+        'postprocessors': [{
+            'key': 'FFmpegExtractAudio',
+            'preferredcodec': 'mp3',
+            'preferredquality': '192',
+        }],
+        'cookiefile': cookies_path,
+        'quiet': True,
+    }
+
+    with YoutubeDL(ydl_opts) as ydl:
+        info = ydl.extract_info(url, download=True)
+        filename = ydl.prepare_filename(info)
+        mp3_path = filename.rsplit('.', 1)[0] + '.mp3'
+        return mp3_path
+
+
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         "🎶 Добро пожаловать в EmoDJ!\nВыбери действие ниже 👇",
         reply_markup=markup
     )
+
 
 async def handle_buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = update.message.text.strip().lower()
@@ -48,6 +70,7 @@ async def handle_buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("⚙️ Пока нет доступных настроек.")
     else:
         await process_query(update, context)
+
 
 async def process_query(update: Update, context: ContextTypes.DEFAULT_TYPE):
     mode = context.user_data.get("mode")
@@ -85,7 +108,7 @@ async def process_query(update: Update, context: ContextTypes.DEFAULT_TYPE):
     else:
         await update.message.reply_text("❌ Ничего не найдено. Попробуй другой запрос.")
 
-# ВРЕМЕННАЯ ЗАГЛУШКА для кнопки "Скачать MP3"
+
 async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
@@ -97,15 +120,23 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             return
 
         title = track["title"]
+        url = track["url"]
 
-        await query.edit_message_text(
-            f"🎵 Трек: *{title}*\n\n"
-            "🔧 Функция скачивания MP3 скоро будет доступна!\n"
-            "Следи за обновлениями EmoDJ 🎧",
-            parse_mode="Markdown"
-        )
+        await query.edit_message_text(f"⏳ Скачиваю MP3: {title}...")
+
+        try:
+            path = download_mp3_from_youtube(url)
+            await query.message.reply_audio(audio=InputFile(path), title=title)
+            os.remove(path)  # Удаляем после отправки
+        except Exception as e:
+            print("❌ Ошибка при скачивании:", e)
+            await query.message.reply_text("❌ Не удалось скачать MP3. Попробуй другой трек.")
+
 
 # Запуск приложения
+if not os.path.exists("downloads"):
+    os.mkdir("downloads")
+
 app = ApplicationBuilder().token(TOKEN).build()
 app.add_handler(CommandHandler("start", start))
 app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_buttons))
@@ -116,4 +147,3 @@ app.run_webhook(
     port=int(os.environ.get("PORT", 8443)),
     webhook_url=WEBHOOK_URL
 )
-
